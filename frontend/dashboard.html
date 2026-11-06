@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Panel Médico - Dashboard</title>
+<style>
+  * { box-sizing: border-box; margin: 0; font-family: Segoe UI, Arial, sans-serif; }
+  body { background: #f3f6fa; color: #1e293b; }
+  header { background: #0f4c81; color: #fff; padding: 14px 24px; display: flex; justify-content: space-between; align-items: center; }
+  header button { width: auto; padding: 6px 14px; background: #fff; color: #0f4c81; }
+  main { max-width: 1100px; margin: 24px auto; padding: 0 16px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 24px; }
+  .card { background: #fff; border-radius: 10px; padding: 18px; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+  .metric .label { color: #64748b; font-size: .9rem; }
+  .metric .value { font-size: 2.2rem; font-weight: 700; color: #0f4c81; }
+  .grid { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; }
+  @media (max-width: 800px) { .grid { grid-template-columns: 1fr; } }
+  h2 { font-size: 1.05rem; }
+  table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+  th, td { text-align: left; padding: 8px; border-bottom: 1px solid #e2e8f0; font-size: .9rem; }
+  .alert { padding: 10px; border-radius: 6px; margin-top: 10px; font-size: .9rem; border-left: 4px solid; }
+  .alta  { background: #fee2e2; border-color: #dc2626; }
+  .media { background: #fef3c7; border-color: #d97706; }
+  .baja  { background: #dbeafe; border-color: #2563eb; }
+  #login { max-width: 340px; margin: 80px auto; }
+  input, button { width: 100%; padding: 10px; margin-top: 10px; border-radius: 6px; border: 1px solid #cbd5e1; }
+  button { background: #0f4c81; color: #fff; border: none; cursor: pointer; }
+  #error { color: #dc2626; margin-top: 8px; font-size: .9rem; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+
+<!-- Pantalla de login -->
+<div id="login" class="card">
+  <h2>Iniciar sesión</h2>
+  <input id="user" placeholder="Usuario" value="admin">
+  <input id="pass" type="password" placeholder="Contraseña" value="Admin123!">
+  <button onclick="login()">Entrar</button>
+  <p id="error"></p>
+</div>
+
+<!-- Dashboard -->
+<div id="app" class="hidden">
+  <header>
+    <strong>🏥 Panel Médico</strong>
+    <span id="generated"></span>
+    <button onclick="logout()">Cerrar sesión</button>
+  </header>
+
+  <main>
+    <section class="cards">
+      <div class="card metric"><div class="label">Pacientes registrados</div><div class="value" id="mPatients">-</div></div>
+      <div class="card metric"><div class="label">Citas de hoy</div><div class="value" id="mAppointments">-</div></div>
+      <div class="card metric"><div class="label">Médicos activos</div><div class="value" id="mDoctors">-</div></div>
+    </section>
+
+    <section class="grid">
+      <div class="card">
+        <h2>📅 Próximas citas del día</h2>
+        <table>
+          <thead><tr><th>Hora</th><th>Paciente</th><th>Médico</th><th>Motivo</th><th>Estado</th></tr></thead>
+          <tbody id="appointments"></tbody>
+        </table>
+      </div>
+      <div class="card">
+        <h2>🔔 Alertas y notificaciones</h2>
+        <div id="alerts"></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+  // Cambia el puerto por el que te muestre "dotnet run"
+  const API = "http://localhost:5179";
+
+  async function login() {
+    const res = await fetch(`${API}/api/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: document.getElementById("user").value,
+        password: document.getElementById("pass").value
+      })
+    });
+    if (!res.ok) {
+      document.getElementById("error").textContent = "Usuario o contraseña incorrectos";
+      return;
+    }
+    const data = await res.json();
+    localStorage.setItem("token", data.token);
+    loadDashboard();
+  }
+
+  async function loadDashboard() {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+
+    const res = await fetch(`${API}/api/dashboard/summary`, {
+      headers: { "Authorization": `Bearer ${token}` }
+    });
+
+    if (res.status === 401) { logout(); return; }
+    const d = await res.json();
+
+    document.getElementById("login").classList.add("hidden");
+    document.getElementById("app").classList.remove("hidden");
+
+    document.getElementById("generated").textContent =
+      "Actualizado: " + new Date(d.generatedAt).toLocaleString();
+    document.getElementById("mPatients").textContent = d.metrics.totalPatients;
+    document.getElementById("mAppointments").textContent = d.metrics.appointmentsToday;
+    document.getElementById("mDoctors").textContent = d.metrics.activeDoctors;
+
+    document.getElementById("appointments").innerHTML = d.upcomingAppointments.map(a =>
+      `<tr><td>${a.time}</td><td>${a.patient}</td><td>${a.doctor}</td><td>${a.reason}</td><td>${a.status}</td></tr>`
+    ).join("");
+
+    document.getElementById("alerts").innerHTML = d.alerts.map(a =>
+      `<div class="alert ${a.severity}"><strong>${a.type}:</strong> ${a.message}</div>`
+    ).join("");
+  }
+
+  function logout() {
+    localStorage.removeItem("token");
+    document.getElementById("app").classList.add("hidden");
+    document.getElementById("login").classList.remove("hidden");
+  }
+
+  loadDashboard();
+</script>
+</body>
+</html>
